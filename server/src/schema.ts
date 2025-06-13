@@ -209,3 +209,26 @@ export const getUserProjectsInputSchema = z.object({
 });
 
 export type GetUserProjectsInput = z.infer<typeof getUserProjectsInputSchema>;
+
+// Auth schemas
+export const loginInputSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6)
+});
+
+export type LoginInput = z.infer<typeof loginInputSchema>;
+
+export const signupInputSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+  password: z.string().min(6)
+});
+
+export type SignupInput = z.infer<typeof signupInputSchema>;
+
+export const authResponseSchema = z.object({
+  user: userSchema,
+  token: z.string()
+});
+
+export type AuthResponse = z.infer<typeof authResponseSchema>;

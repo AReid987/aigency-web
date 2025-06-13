@@ -13,7 +13,7 @@ interface ProjectCanvasProps {
   user: User;
 }
 
-export function ProjectCanvas({ project, user }: ProjectCanvasProps) {
+export function ProjectCanvas({ project }: ProjectCanvasProps) {
   const [nodes, setNodes] = useState<CanvasNodeType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAddNodeDialogOpen, setIsAddNodeDialogOpen] = useState(false);
@@ -41,8 +41,7 @@ export function ProjectCanvas({ project, user }: ProjectCanvasProps) {
     try {
       const newNode = await trpc.createCanvasNode.mutate({
         ...nodeData,
-        project_id: project.id,
-        created_by: user.id
+        project_id: project.id
       });
       setNodes((prev: CanvasNodeType[]) => [...prev, newNode]);
       setIsAddNodeDialogOpen(false);

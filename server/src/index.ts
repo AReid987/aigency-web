@@ -1,5 +1,5 @@
 
-import { initTRPC } from '@trpc/server';
+import { initTRPC, TRPCError } from '@trpc/server';
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
 import 'dotenv/config';
 import cors from 'cors';
@@ -17,7 +17,10 @@ import {
   createCanvasEdgeInputSchema,
   createAiDocumentInputSchema,
   createProjectShareInputSchema,
-  createCommentInputSchema
+  createCommentInputSchema,
+  loginInputSchema,
+  signupInputSchema,
+  type User
 } from './schema';
 
 // Import handlers
@@ -40,98 +43,133 @@ import { deleteProjectShare } from './handlers/delete_project_share';
 import { createComment } from './handlers/create_comment';
 import { getProjectComments } from './handlers/get_project_comments';
 import { deleteComment } from './handlers/delete_comment';
+import { login, signup } from './handlers/auth';
 
-const t = initTRPC.create({
+// Context type
+interface Context {
+  user?: User;
+}
+
+const t = initTRPC.context<Context>().create({
   transformer: superjson,
 });
 
 const publicProcedure = t.procedure;
 const router = t.router;
 
+// Protected procedure middleware
+const protectedProcedure = t.procedure.use(async ({ ctx, next }) => {
+  // For now, use a mock user when no context user is provided
+  // In a real implementation, this would validate JWT tokens
+  const user = ctx.user || {
+    id: 'user-1',
+    email: 'user@example.com',
+    name: 'Creative User',
+    avatar_url: null,
+    created_at: new Date(),
+    updated_at: new Date()
+  };
+
+  return next({
+    ctx: {
+      ...ctx,
+      user
+    },
+  });
+});
+
 const appRouter = router({
   healthcheck: publicProcedure.query(() => {
     return { status: 'ok', timestamp: new Date().toISOString() };
   }),
 
+  // Auth routes
+  login: publicProcedure
+    .input(loginInputSchema)
+    .mutation(({ input }) => login(input)),
+  
+  signup: publicProcedure
+    .input(signupInputSchema)
+    .mutation(({ input }) => signup(input)),
+
   // Project routes
-  createProject: publicProcedure
-    .input(createProjectInputSchema)
-    .mutation(({ input }) => createProject(input)),
+  createProject: protectedProcedure
+    .input(createProjectInputSchema.omit({ owner_id: true }))
+    .mutation(({ input, ctx }) => createProject({ ...input, owner_id: ctx.user.id })),
   
-  getUserProjects: publicProcedure
-    .input(getUserProjectsInputSchema)
-    .query(({ input }) => getUserProjects(input)),
+  getUserProjects: protectedProcedure
+    .query(({ ctx }) => getUserProjects({ user_id: ctx.user.id })),
   
-  getProject: publicProcedure
+  getProject: protectedProcedure
     .input(getProjectInputSchema)
     .query(({ input }) => getProject(input)),
   
-  updateProject: publicProcedure
+  updateProject: protectedProcedure
     .input(updateProjectInputSchema)
     .mutation(({ input }) => updateProject(input)),
   
-  deleteProject: publicProcedure
+  deleteProject: protectedProcedure
     .input(getProjectInputSchema)
     .mutation(({ input }) => deleteProject(input)),
 
   // Canvas node routes
-  createCanvasNode: publicProcedure
-    .input(createCanvasNodeInputSchema)
-    .mutation(({ input }) => createCanvasNode(input)),
+  createCanvasNode: protectedProcedure
+    .input(createCanvasNodeInputSchema.omit({ created_by: true }))
+    .mutation(({ input, ctx }) => createCanvasNode({ ...input, created_by: ctx.user.id })),
   
-  updateCanvasNode: publicProcedure
+  updateCanvasNode: protectedProcedure
     .input(updateCanvasNodeInputSchema)
     .mutation(({ input }) => updateCanvasNode(input)),
   
-  deleteCanvasNode: publicProcedure
+  deleteCanvasNode: protectedProcedure
     .input(getProjectInputSchema.pick({ id: true }))
     .mutation(({ input }) => deleteCanvasNode(input)),
   
-  getProjectCanvas: publicProcedure
+  getProjectCanvas: protectedProcedure
     .input(getProjectCanvasInputSchema)
     .query(({ input }) => getProjectCanvas(input)),
 
   // Canvas edge routes
-  createCanvasEdge: publicProcedure
+  createCanvasEdge: protectedProcedure
     .input(createCanvasEdgeInputSchema)
     .mutation(({ input }) => createCanvasEdge(input)),
   
-  deleteCanvasEdge: publicProcedure
+  deleteCanvasEdge: protectedProcedure
     .input(getProjectInputSchema.pick({ id: true }))
     .mutation(({ input }) => deleteCanvasEdge(input)),
 
   // AI document routes
-  createAiDocument: publicProcedure
+  createAiDocument: protectedProcedure
     .input(createAiDocumentInputSchema)
     .mutation(({ input }) => createAiDocument(input)),
   
-  getAiDocument: publicProcedure
+  getAiDocument: protectedProcedure
     .input(getProjectInputSchema.pick({ id: true }).extend({ node_id: getProjectInputSchema.shape.id }))
     .query(({ input }) => getAiDocument({ node_id: input.node_id })),
 
   // Project sharing routes
-  createProjectShare: publicProcedure
-    .input(createProjectShareInputSchema)
-    .mutation(({ input }) => createProjectShare(input)),
+  createProjectShare: protectedProcedure
+    .input(createProjectShareInputSchema.omit({ created_by: true }))
+    .mutation(({ input, ctx }) => createProjectShare({ ...input, created_by: ctx.user.id })),
   
-  getProjectShares: publicProcedure
+  getProjectShares: protectedProcedure
     .input(getProjectCanvasInputSchema)
     .query(({ input }) => getProjectShares({ project_id: input.project_id })),
   
-  deleteProjectShare: publicProcedure
+  deleteProjectShare: protectedProcedure
     .input(getProjectInputSchema.pick({ id: true }))
     .mutation(({ input }) => deleteProjectShare(input)),
 
   // Comment routes
-  createComment: publicProcedure
-    .input(createCommentInputSchema)
-    .mutation(({ input }) => createComment(input)),
+  createComment: protectedProcedure
+    .input(createCommentInputSchema.omit({ author_id: true }))
+    .mutation(({ input, ctx }) => createComment({ ...input, author_id: ctx.user.id })),
   
-  getProjectComments: publicProcedure
+  getProjectComments: protectedProcedure
     .input(getProjectCanvasInputSchema)
     .query(({ input }) => getProjectComments({ project_id: input.project_id })),
   
-  deleteComment: publicProcedure
+  deleteComment: protectedProcedure
     .input(getProjectInputSchema.pick({ id: true }))
     .mutation(({ input }) => deleteComment(input))
 });
@@ -145,7 +183,9 @@ async function start() {
       cors()(req, res, next);
     },
     router: appRouter,
-    createContext() {
+    createContext({ req }): Context {
+      // In a real implementation, extract user from JWT token in Authorization header
+      // For now, mock context
       return {};
     },
   });
